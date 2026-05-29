@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Aldepe Forge</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=papota-2" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   </head>
   <body>
@@ -33,7 +33,7 @@
           </button>
         </nav>
 
-        <div class="session-pill">
+        <div class="session-pill is-hidden" id="sessionPill">
           <span id="modeBadge">Local</span>
           <button class="icon-button" id="soundButton" type="button" aria-label="Sonido">
             <i data-lucide="volume-2"></i>
@@ -57,7 +57,11 @@
           <form class="login-form" id="loginForm">
             <p class="eyebrow">Empieza una colección</p>
             <h2>Entra con correo y contraseña</h2>
-            <p class="starter-copy">Cuenta nueva = 30 sobres de bienvenida.</p>
+            <div class="starter-bonus" aria-label="Cuenta nueva con 30 sobres de bienvenida">
+              <span class="bonus-kicker">Cuenta nueva</span>
+              <strong>30</strong>
+              <span>sobres de bienvenida</span>
+            </div>
             <label for="playerEmail">Correo</label>
             <input id="playerEmail" name="playerEmail" type="email" autocomplete="email" maxlength="80" placeholder="tu@email.com" required />
 
@@ -73,6 +77,7 @@
               <i data-lucide="user-plus"></i>
               Crear cuenta
             </button>
+            <p class="auth-hint" id="authHint"></p>
           </form>
         </section>
 
@@ -310,7 +315,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="./config.js"></script>
-    <script type="module" src="./app.js"></script>
+    <script src="./config.js?v=papota-2"></script>
+    <script type="module" src="./app.js?v=papota-2"></script>
   </body>
 </html>

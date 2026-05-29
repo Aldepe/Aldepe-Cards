@@ -8,6 +8,11 @@ const STORAGE_KEYS = {
 const PACK_SIZE = 3;
 const PACK_COOLDOWN_MS = 8 * 60 * 60 * 1000;
 const HOLO_CHANCE = 0.025;
+const DEFAULT_SUPABASE_CONFIG = {
+  url: "https://snjrfvawkkdwyzshmslw.supabase.co",
+  anonKey:
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNuanJmdmF3a2tkd3l6c2htc2x3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNzc3ODcsImV4cCI6MjA5NTY1Mzc4N30.iZt2InLg2i_O3r1i6uDQFs6Z7jV_AzHPQzJlIDR7vJg",
+};
 
 const RARITIES = {
   comun: {
@@ -71,10 +76,12 @@ const els = {
   loginGate: $("#loginGate"),
   workspace: $("#workspace"),
   appNav: $("#appNav"),
+  sessionPill: $("#sessionPill"),
   loginForm: $("#loginForm"),
   playerEmail: $("#playerEmail"),
   playerPassword: $("#playerPassword"),
   signupButton: $("#signupButton"),
+  authHint: $("#authHint"),
   playerTitle: $("#playerTitle"),
   modeBadge: $("#modeBadge"),
   soundButton: $("#soundButton"),
@@ -189,10 +196,13 @@ function bindEvents() {
 
 async function handleLogin(event) {
   event.preventDefault();
+  setAuthHint("");
   const email = els.playerEmail.value.trim();
   const password = els.playerPassword.value;
   if (!email || !password) {
-    showToast("Pon correo y contraseña.");
+    const message = "Pon correo y contraseña.";
+    setAuthHint(message, "error");
+    showToast(message);
     return;
   }
 
@@ -208,15 +218,20 @@ async function handleLogin(event) {
     showWorkspace();
   } catch (error) {
     console.error(error);
-    showToast(error.message || "No he podido iniciar sesión.");
+    const message = error.message || "No he podido iniciar sesión.";
+    setAuthHint(message, "error");
+    showToast(message);
   }
 }
 
 async function handleSignup() {
+  setAuthHint("");
   const email = els.playerEmail.value.trim();
   const password = els.playerPassword.value;
   if (!email || password.length < 6) {
-    showToast("Para crear cuenta usa email y contraseña de al menos 6 caracteres.");
+    const message = "Para crear cuenta usa email y contraseña de al menos 6 caracteres.";
+    setAuthHint(message, "error");
+    showToast(message);
     return;
   }
 
@@ -224,16 +239,26 @@ async function handleSignup() {
   const config = getConfig();
 
   try {
+    let result = null;
     if (config?.url && config?.anonKey) {
-      await startSupabaseSession(email, password, config, "signup");
+      result = await startSupabaseSession(email, password, config, "signup");
     } else {
       startDemoSession(email);
     }
+    if (result?.pendingConfirmation) {
+      const message = "Cuenta creada. Confirma el email y vuelve a entrar: tus 30 sobres estarán esperándote.";
+      setAuthHint(message, "success");
+      showToast(message);
+      return;
+    }
     showWorkspace();
+    setAuthHint("");
     showToast("Cuenta creada. Tienes 30 sobres de bienvenida.");
   } catch (error) {
     console.error(error);
-    showToast(error.message || "No he podido crear la cuenta.");
+    const message = error.message || "No he podido crear la cuenta.";
+    setAuthHint(message, "error");
+    showToast(message);
   }
 }
 
@@ -291,6 +316,7 @@ async function startSupabaseSession(email, password, config, mode) {
       email,
       password,
       options: {
+        emailRedirectTo: window.location.href,
         data: {
           username: email.split("@")[0],
         },
@@ -310,6 +336,9 @@ async function startSupabaseSession(email, password, config, mode) {
     session = current.data.session;
   }
   if (!session) {
+    if (mode === "signup" && authResult.data.user) {
+      return { pendingConfirmation: true };
+    }
     throw new Error("Revisa el email: puede faltar confirmarlo antes de entrar.");
   }
 
@@ -351,6 +380,7 @@ async function startSupabaseSession(email, password, config, mode) {
 
   await loadRemoteData();
   renderAll();
+  return { pendingConfirmation: false };
 }
 
 async function loadRemoteData() {
@@ -444,6 +474,7 @@ function showWorkspace() {
   els.loginGate.classList.add("is-hidden");
   els.workspace.classList.remove("is-hidden");
   els.appNav.classList.remove("is-hidden");
+  els.sessionPill.classList.remove("is-hidden");
   els.logoutButton.classList.remove("is-hidden");
   updateAdminVisibility();
   switchView("arena", { silent: true });
@@ -476,6 +507,7 @@ async function logout() {
   els.workspace.classList.add("is-hidden");
   els.loginGate.classList.remove("is-hidden");
   els.appNav.classList.add("is-hidden");
+  els.sessionPill.classList.add("is-hidden");
   els.logoutButton.classList.add("is-hidden");
   updateAdminVisibility();
   renderConfigState();
@@ -1146,6 +1178,7 @@ function renderAll(options = {}) {
 
 function renderConfigState() {
   const config = getConfig();
+  els.settingsButton.classList.toggle("is-hidden", Boolean(getStaticConfig()));
   els.modeBadge.textContent = config?.url && config?.anonKey ? "Online" : "Local";
   if (state.mode === "supabase") {
     els.modeBadge.textContent = state.isAdmin ? "Admin" : "Jugador";
@@ -1575,8 +1608,8 @@ function getConfig() {
 
 function getStaticConfig() {
   const staticConfig = window.ALDEPE_CONFIG;
-  const url = staticConfig?.supabaseUrl?.trim();
-  const anonKey = staticConfig?.supabaseAnonKey?.trim();
+  const url = staticConfig?.supabaseUrl?.trim() || DEFAULT_SUPABASE_CONFIG.url;
+  const anonKey = staticConfig?.supabaseAnonKey?.trim() || DEFAULT_SUPABASE_CONFIG.anonKey;
 
   if (!url && !anonKey) {
     return null;
@@ -2279,6 +2312,14 @@ function showToast(message) {
   els.toast.textContent = message;
   els.toast.classList.add("is-visible");
   toastTimer = setTimeout(() => els.toast.classList.remove("is-visible"), 3600);
+}
+
+function setAuthHint(message, tone = "") {
+  if (!els.authHint) return;
+  els.authHint.textContent = message;
+  els.authHint.classList.toggle("is-visible", Boolean(message));
+  els.authHint.classList.toggle("is-error", tone === "error");
+  els.authHint.classList.toggle("is-success", tone === "success");
 }
 
 function renderIcons() {

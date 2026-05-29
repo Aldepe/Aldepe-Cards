@@ -1,0 +1,30 @@
+{
+  "name": "Viernes Turbio",
+  "color": "#ff6f61",
+  "cards": [
+    {
+      "name": "Modo Leyenda",
+      "description": "La mesa se queda mirando y nadie sabe por que.",
+      "rarity": "comun",
+      "weight": 60
+    },
+    {
+      "name": "Clip Mental",
+      "description": "Una jugada que parecia mala hasta que funciono.",
+      "rarity": "rara",
+      "weight": 24
+    },
+    {
+      "name": "Topdeck Ilegal",
+      "description": "Demasiada suerte para explicarlo con matematicas.",
+      "rarity": "epica",
+      "weight": 9
+    },
+    {
+      "name": "Aldepe Nuclear",
+      "description": "Si sale holo, se pausa la conversacion.",
+      "rarity": "legendaria",
+      "weight": 2
+    }
+  ]
+}

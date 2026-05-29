@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aldepe Forge</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup" aria-label="Aldepe Forge">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <p class="eyebrow">Coleccionable privado</p>
+            <h1>Aldepe Forge</h1>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="Vistas">
+          <button class="nav-tab is-active" data-view="arena" type="button">
+            <i data-lucide="sparkles"></i>
+            Sobres
+          </button>
+          <button class="nav-tab" data-view="collection" type="button">
+            <i data-lucide="layout-grid"></i>
+            Colección
+          </button>
+          <button class="nav-tab" data-view="admin" type="button">
+            <i data-lucide="upload-cloud"></i>
+            Admin
+          </button>
+        </nav>
+
+        <div class="session-pill">
+          <span id="modeBadge">Local</span>
+          <button class="icon-button" id="soundButton" type="button" aria-label="Sonido">
+            <i data-lucide="volume-2"></i>
+          </button>
+          <button class="icon-button is-hidden" id="logoutButton" type="button" aria-label="Salir">
+            <i data-lucide="log-out"></i>
+          </button>
+          <button class="icon-button" id="settingsButton" type="button" aria-label="Ajustes">
+            <i data-lucide="settings"></i>
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section class="login-gate" id="loginGate">
+          <div class="login-art" aria-hidden="true">
+            <div class="floating-card card-a"></div>
+            <div class="floating-card card-b"></div>
+            <div class="floating-card card-c"></div>
+          </div>
+          <form class="login-form" id="loginForm">
+            <p class="eyebrow">Empieza una colección</p>
+            <h2>Entra con tu nombre de jugador</h2>
+            <label for="playerName">Nombre</label>
+            <input id="playerName" name="playerName" autocomplete="nickname" maxlength="24" placeholder="Ej. Alex" required />
+
+            <label for="playerPassword">Contraseña</label>
+            <div class="inline-input">
+              <input id="playerPassword" name="playerPassword" type="password" autocomplete="current-password" maxlength="64" placeholder="Contraseña del grupo" required />
+              <button class="primary-button" type="submit">
+                <i data-lucide="log-in"></i>
+                Entrar
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section class="workspace is-hidden" id="workspace">
+          <div class="profile-strip">
+            <div>
+              <p class="eyebrow">Jugador</p>
+              <h2 id="playerTitle">Invitado</h2>
+            </div>
+            <div class="stat-group" aria-label="Resumen de colección">
+              <div class="stat">
+                <strong id="ownedStat">0</strong>
+                <span>cartas</span>
+              </div>
+              <div class="stat">
+                <strong id="uniqueStat">0</strong>
+                <span>únicas</span>
+              </div>
+              <div class="stat">
+                <strong id="completionStat">0%</strong>
+                <span>álbum</span>
+              </div>
+            </div>
+          </div>
+
+          <section class="view-panel" id="arenaView" data-view-panel="arena">
+            <div class="pack-selector" id="packSelector" aria-label="Sobres disponibles"></div>
+
+            <div class="pack-stage">
+              <div class="pack-copy">
+                <p class="eyebrow">Sobre activo</p>
+                <h2 id="activePackName">Sin sobre</h2>
+                <p id="activePackMeta">Elige una colección para empezar.</p>
+                <p class="cooldown-copy" id="cooldownCopy"></p>
+                <div class="odds-row" id="oddsRow"></div>
+              </div>
+
+              <div class="pack-machine" id="packMachine" aria-live="polite">
+                <div class="pack-object" id="packObject">
+                  <span class="pack-glow"></span>
+                  <img id="packCoverImage" class="pack-cover-image" alt="" />
+                  <span class="pack-line"></span>
+                </div>
+                <button class="open-button" id="openPackButton" type="button">
+                  <i data-lucide="zap"></i>
+                  Abrir sobre
+                </button>
+              </div>
+            </div>
+
+            <div class="result-rail" id="resultRail" aria-label="Últimas cartas obtenidas"></div>
+
+            <section class="activity-band">
+              <div>
+                <p class="eyebrow">Actividad</p>
+                <h2>Últimos sobres</h2>
+              </div>
+              <div class="activity-list" id="activityList"></div>
+            </section>
+          </section>
+
+          <section class="view-panel is-hidden" id="collectionView" data-view-panel="collection">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Álbum</p>
+                <h2>Tu colección</h2>
+              </div>
+              <div class="filter-group" id="rarityFilters" aria-label="Filtros de rareza"></div>
+            </div>
+            <div class="collection-grid" id="collectionGrid"></div>
+
+            <section class="trade-panel">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Mercado</p>
+                  <h2>Intercambios</h2>
+                </div>
+              </div>
+              <form class="trade-form" id="tradeForm">
+                <label>
+                  Jugador
+                  <select id="tradePlayer" name="tradePlayer"></select>
+                </label>
+                <label>
+                  Das
+                  <select id="tradeOfferCard" name="tradeOfferCard"></select>
+                </label>
+                <label>
+                  Pides
+                  <select id="tradeRequestCard" name="tradeRequestCard"></select>
+                </label>
+                <button class="primary-button" type="submit">
+                  <i data-lucide="repeat-2"></i>
+                  Proponer
+                </button>
+              </form>
+              <div class="trade-list" id="tradeList"></div>
+            </section>
+          </section>
+
+          <section class="view-panel is-hidden" id="adminView" data-view-panel="admin">
+            <div class="admin-layout">
+              <form class="admin-form" id="packForm">
+                <div>
+                  <p class="eyebrow">Admin</p>
+                  <h2>Crear sobre</h2>
+                </div>
+
+                <label for="packName">Nombre del sobre</label>
+                <input id="packName" name="packName" maxlength="48" placeholder="Ej. Liga Aldepe 01" required />
+
+                <label for="packCover">Portada</label>
+                <input id="packCover" name="packCover" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required />
+
+                <label for="packColor">Color del sobre</label>
+                <input id="packColor" name="packColor" type="color" value="#ff6f61" />
+
+                <button class="primary-button" type="submit">
+                  <i data-lucide="package-plus"></i>
+                  Crear sobre
+                </button>
+              </form>
+
+              <form class="admin-form" id="importForm">
+                <div>
+                  <p class="eyebrow">Admin</p>
+                  <h2>Importar sobre</h2>
+                </div>
+
+                <label for="importFile">Archivo JSON</label>
+                <input id="importFile" name="importFile" type="file" accept="application/json,.json" required />
+
+                <button class="primary-button" type="submit">
+                  <i data-lucide="file-up"></i>
+                  Importar
+                </button>
+              </form>
+
+              <form class="admin-form" id="cardForm">
+                <div>
+                  <p class="eyebrow">Admin</p>
+                  <h2>Subir nueva carta</h2>
+                </div>
+
+                <label for="cardPack">Sobre</label>
+                <select id="cardPack" name="cardPack" required></select>
+
+                <label for="cardName">Nombre de carta</label>
+                <input id="cardName" name="cardName" maxlength="48" placeholder="Ej. Prisma de medianoche" required />
+
+                <label for="cardDescription">Descripción</label>
+                <textarea id="cardDescription" name="cardDescription" maxlength="180" placeholder="Una frase corta con sabor de carta"></textarea>
+
+                <div class="field-grid">
+                  <label>
+                    Rareza
+                    <select id="cardRarity" name="cardRarity">
+                      <option value="comun">Común</option>
+                      <option value="rara">Rara</option>
+                      <option value="epica">Épica</option>
+                      <option value="legendaria">Legendaria</option>
+                    </select>
+                  </label>
+                  <label>
+                    Peso
+                    <input id="cardWeight" name="cardWeight" type="number" min="1" max="200" value="60" />
+                  </label>
+                </div>
+
+                <label for="cardImage">Imagen</label>
+                <input id="cardImage" name="cardImage" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required />
+
+                <button class="primary-button" type="submit">
+                  <i data-lucide="plus"></i>
+                  Crear carta
+                </button>
+              </form>
+
+              <div class="admin-preview">
+                <p class="eyebrow">Archivo</p>
+                <h2>Sobres y cartas</h2>
+                <div class="small-card-list" id="adminPackList"></div>
+                <div class="small-card-list" id="adminCardList"></div>
+              </div>
+
+              <div class="admin-preview">
+                <p class="eyebrow">Jugadores</p>
+                <h2>Monitor</h2>
+                <div class="small-card-list" id="adminPlayerList"></div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog class="settings-modal" id="settingsModal">
+      <form method="dialog" class="settings-content">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Conexión</p>
+            <h2>Ajustes de Supabase</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Cerrar" type="submit">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+
+        <label for="supabaseUrl">Project URL</label>
+        <input id="supabaseUrl" placeholder="https://xxxx.supabase.co" />
+
+        <label for="supabaseAnonKey">Anon public key</label>
+        <textarea id="supabaseAnonKey" rows="4" placeholder="eyJ..."></textarea>
+
+        <div class="modal-actions">
+          <button class="secondary-button" id="clearConfigButton" type="button">
+            <i data-lucide="trash-2"></i>
+            Local
+          </button>
+          <button class="primary-button" id="saveConfigButton" type="button">
+            <i data-lucide="save"></i>
+            Guardar
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="./config.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

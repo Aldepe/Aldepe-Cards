@@ -1,7 +1,7 @@
 const STORAGE_KEYS = {
   config: "aldepe-forge:supabase-config",
   demo: "aldepe-forge:demo-state-v4",
-  player: "aldepe-forge:last-player",
+  player: "aldepe-forge:last-email",
   sound: "aldepe-forge:sound",
 };
 
@@ -40,6 +40,8 @@ const state = {
   mode: "demo",
   profile: null,
   isAdmin: false,
+  packCredits: 0,
+  infinitePacks: false,
   packs: [],
   selectedPackId: null,
   cards: [],
@@ -54,6 +56,7 @@ const state = {
   activeView: "arena",
   activeFilter: "all",
   opening: false,
+  editingCardId: null,
   soundEnabled: localStorage.getItem(STORAGE_KEYS.sound) !== "off",
 };
 
@@ -67,9 +70,11 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 const els = {
   loginGate: $("#loginGate"),
   workspace: $("#workspace"),
+  appNav: $("#appNav"),
   loginForm: $("#loginForm"),
-  playerName: $("#playerName"),
+  playerEmail: $("#playerEmail"),
   playerPassword: $("#playerPassword"),
+  signupButton: $("#signupButton"),
   playerTitle: $("#playerTitle"),
   modeBadge: $("#modeBadge"),
   soundButton: $("#soundButton"),
@@ -77,6 +82,7 @@ const els = {
   ownedStat: $("#ownedStat"),
   uniqueStat: $("#uniqueStat"),
   completionStat: $("#completionStat"),
+  packCreditsStat: $("#packCreditsStat"),
   openPackButton: $("#openPackButton"),
   cooldownCopy: $("#cooldownCopy"),
   packMachine: $("#packMachine"),
@@ -103,8 +109,12 @@ const els = {
   importFile: $("#importFile"),
   cardForm: $("#cardForm"),
   cardPack: $("#cardPack"),
+  cardName: $("#cardName"),
+  cardDescription: $("#cardDescription"),
+  cardImage: $("#cardImage"),
   cardRarity: $("#cardRarity"),
   cardWeight: $("#cardWeight"),
+  cancelCardEditButton: $("#cancelCardEditButton"),
   adminPackList: $("#adminPackList"),
   adminCardList: $("#adminCardList"),
   adminPlayerList: $("#adminPlayerList"),
@@ -120,7 +130,7 @@ const els = {
 init();
 
 function init() {
-  els.playerName.value = localStorage.getItem(STORAGE_KEYS.player) || "";
+  els.playerEmail.value = localStorage.getItem(STORAGE_KEYS.player) || "";
   bindEvents();
   updateAdminVisibility();
   renderConfigState();
@@ -132,6 +142,7 @@ function init() {
 
 function bindEvents() {
   els.loginForm.addEventListener("submit", handleLogin);
+  els.signupButton.addEventListener("click", handleSignup);
   els.openPackButton.addEventListener("click", openPack);
   els.packForm.addEventListener("submit", handlePackCreate);
   els.importForm.addEventListener("submit", handlePackImport);
@@ -141,6 +152,10 @@ function bindEvents() {
   els.logoutButton.addEventListener("click", logout);
   els.cardRarity.addEventListener("change", () => {
     els.cardWeight.value = String(RARITIES[els.cardRarity.value]?.weight || 20);
+  });
+  els.cancelCardEditButton.addEventListener("click", () => {
+    resetCardForm();
+    renderIcons();
   });
 
   els.packSelector.addEventListener("click", (event) => {
@@ -174,26 +189,21 @@ function bindEvents() {
 
 async function handleLogin(event) {
   event.preventDefault();
-  const username = els.playerName.value.trim();
+  const email = els.playerEmail.value.trim();
   const password = els.playerPassword.value;
-  if (!username) {
-    showToast("Pon un nombre de jugador para entrar.");
+  if (!email || !password) {
+    showToast("Pon correo y contraseña.");
     return;
   }
 
-  localStorage.setItem(STORAGE_KEYS.player, username);
+  localStorage.setItem(STORAGE_KEYS.player, email);
   const config = getConfig();
 
   try {
-    if (!(await validateAccessPassword(password, config))) {
-      showToast("Contraseña incorrecta.");
-      return;
-    }
-
     if (config?.url && config?.anonKey) {
-      await startSupabaseSession(username, config);
+      await startSupabaseSession(email, password, config, "login");
     } else {
-      startDemoSession(username, password, config);
+      startDemoSession(email);
     }
     showWorkspace();
   } catch (error) {
@@ -202,20 +212,55 @@ async function handleLogin(event) {
   }
 }
 
-function startDemoSession(username, password, config) {
+async function handleSignup() {
+  const email = els.playerEmail.value.trim();
+  const password = els.playerPassword.value;
+  if (!email || password.length < 6) {
+    showToast("Para crear cuenta usa email y contraseña de al menos 6 caracteres.");
+    return;
+  }
+
+  localStorage.setItem(STORAGE_KEYS.player, email);
+  const config = getConfig();
+
+  try {
+    if (config?.url && config?.anonKey) {
+      await startSupabaseSession(email, password, config, "signup");
+    } else {
+      startDemoSession(email);
+    }
+    showWorkspace();
+    showToast("Cuenta creada. Tienes 30 sobres de bienvenida.");
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "No he podido crear la cuenta.");
+  }
+}
+
+function startDemoSession(email) {
   const saved = readDemoState();
+  const username = email.split("@")[0] || email;
   const playerId = `demo:${slugify(username)}`;
   const existingPlayer = saved.players.find((player) => player.id === playerId);
   const player = existingPlayer || {
     id: playerId,
     username,
+    email,
+    is_admin: false,
+    pack_credits: 30,
+    infinite_packs: false,
     created_at: new Date().toISOString(),
     last_pack_opened_at: null,
   };
   player.username = username;
+  player.is_admin = false;
+  player.pack_credits = Number(player.pack_credits ?? 30);
+  player.infinite_packs = Boolean(player.infinite_packs ?? false);
   state.mode = "demo";
   state.profile = player;
-  state.isAdmin = isDemoAdmin(username, password, config);
+  state.isAdmin = false;
+  state.packCredits = Number(player.pack_credits ?? 30);
+  state.infinitePacks = Boolean(player.infinite_packs);
   state.packs = saved.packs;
   state.selectedPackId = saved.selectedPackId || saved.packs[0]?.id || null;
   state.cards = saved.cards;
@@ -231,7 +276,7 @@ function startDemoSession(username, password, config) {
   saveDemoState();
 }
 
-async function startSupabaseSession(username, config) {
+async function startSupabaseSession(email, password, config, mode) {
   const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
   supabaseClient = createClient(config.url, config.anonKey, {
     auth: {
@@ -240,19 +285,36 @@ async function startSupabaseSession(username, config) {
     },
   });
 
-  let {
-    data: { session },
-  } = await supabaseClient.auth.getSession();
+  let authResult;
+  if (mode === "signup") {
+    authResult = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username: email.split("@")[0],
+        },
+      },
+    });
+  } else {
+    authResult = await supabaseClient.auth.signInWithPassword({ email, password });
+  }
 
+  if (authResult.error) {
+    throw new Error(authResult.error.message);
+  }
+
+  let session = authResult.data.session;
   if (!session) {
-    const { data, error } = await supabaseClient.auth.signInAnonymously();
-    if (error) {
-      throw new Error("Activa Anonymous sign-ins en Supabase Auth y vuelve a entrar.");
-    }
-    session = data.session;
+    const current = await supabaseClient.auth.getSession();
+    session = current.data.session;
+  }
+  if (!session) {
+    throw new Error("Revisa el email: puede faltar confirmarlo antes de entrar.");
   }
 
   const userId = session.user.id;
+  const username = email.split("@")[0];
   const { error: insertProfileError } = await supabaseClient.from("profiles").insert({ id: userId, username });
 
   if (insertProfileError && insertProfileError.code !== "23505") {
@@ -272,7 +334,7 @@ async function startSupabaseSession(username, config) {
 
   const { data: profile, error: readError } = await supabaseClient
     .from("profiles")
-    .select("id, username, is_admin, last_pack_opened_at")
+    .select("id, username, is_admin, pack_credits, infinite_packs, last_pack_opened_at")
     .eq("id", userId)
     .single();
 
@@ -283,6 +345,8 @@ async function startSupabaseSession(username, config) {
   state.mode = "supabase";
   state.profile = profile;
   state.isAdmin = Boolean(profile.is_admin);
+  state.packCredits = Number(profile.pack_credits || 0);
+  state.infinitePacks = Boolean(profile.infinite_packs);
   state.lastPackOpenedAt = profile.last_pack_opened_at;
 
   await loadRemoteData();
@@ -292,13 +356,15 @@ async function startSupabaseSession(username, config) {
 async function loadRemoteData() {
   const { data: profile } = await supabaseClient
     .from("profiles")
-    .select("id, username, is_admin, last_pack_opened_at")
+    .select("id, username, is_admin, pack_credits, infinite_packs, last_pack_opened_at")
     .eq("id", state.profile.id)
     .single();
 
   if (profile) {
     state.profile = profile;
     state.isAdmin = Boolean(profile.is_admin);
+    state.packCredits = Number(profile.pack_credits || 0);
+    state.infinitePacks = Boolean(profile.infinite_packs);
     state.lastPackOpenedAt = profile.last_pack_opened_at;
   }
 
@@ -324,7 +390,7 @@ async function loadRemoteData() {
 
   const { data: players, error: playersError } = await supabaseClient
     .from("profiles")
-    .select("id, username, is_admin, last_pack_opened_at, created_at")
+    .select("id, username, is_admin, pack_credits, infinite_packs, last_pack_opened_at, created_at")
     .order("created_at", { ascending: true });
 
   if (playersError) {
@@ -377,6 +443,7 @@ async function loadRemoteData() {
 function showWorkspace() {
   els.loginGate.classList.add("is-hidden");
   els.workspace.classList.remove("is-hidden");
+  els.appNav.classList.remove("is-hidden");
   els.logoutButton.classList.remove("is-hidden");
   updateAdminVisibility();
   switchView("arena", { silent: true });
@@ -392,6 +459,8 @@ async function logout() {
   state.mode = "demo";
   state.profile = null;
   state.isAdmin = false;
+  state.packCredits = 0;
+  state.infinitePacks = false;
   state.packs = [];
   state.selectedPackId = null;
   state.cards = [];
@@ -406,6 +475,7 @@ async function logout() {
   els.playerPassword.value = "";
   els.workspace.classList.add("is-hidden");
   els.loginGate.classList.remove("is-hidden");
+  els.appNav.classList.add("is-hidden");
   els.logoutButton.classList.add("is-hidden");
   updateAdminVisibility();
   renderConfigState();
@@ -456,6 +526,11 @@ async function openPack() {
   if (cooldownMs > 0) {
     renderCooldown();
     showToast(`Podrás abrir otro sobre en ${formatDuration(cooldownMs)}.`);
+    return;
+  }
+  if (!state.infinitePacks && state.packCredits <= 0) {
+    renderCooldown();
+    showToast("No te quedan sobres. Pide recarga al admin desde Supabase.");
     return;
   }
 
@@ -520,8 +595,13 @@ function openDemoPack() {
   }
   state.activity = state.activity.slice(0, 12);
   state.lastPackOpenedAt = new Date().toISOString();
+  if (!state.infinitePacks) {
+    state.packCredits = Math.max(0, state.packCredits - 1);
+  }
   state.players = state.players.map((player) =>
-    player.id === state.profile.id ? { ...player, last_pack_opened_at: state.lastPackOpenedAt } : player,
+    player.id === state.profile.id
+      ? { ...player, last_pack_opened_at: state.lastPackOpenedAt, pack_credits: state.packCredits }
+      : player,
   );
   saveDemoState();
   return pulls;
@@ -587,28 +667,39 @@ async function handleCardCreate(event) {
   }
 
   if (!file || !file.size) {
-    showToast("Sube una imagen para la carta.");
-    return;
+    if (!state.editingCardId) {
+      showToast("Sube una imagen para la carta.");
+      return;
+    }
   }
 
-  if (file.size > 5 * 1024 * 1024) {
+  if (file?.size > 5 * 1024 * 1024) {
     showToast("La imagen pesa más de 5 MB. Recórtala un poco.");
     return;
   }
 
   try {
-    if (state.mode === "supabase") {
-      await createRemoteCard(card, file);
-      await loadRemoteData();
+    const wasEditing = Boolean(state.editingCardId);
+    if (state.editingCardId) {
+      if (state.mode === "supabase") {
+        await updateRemoteCard(state.editingCardId, card, file);
+        await loadRemoteData();
+      } else {
+        await updateDemoCard(state.editingCardId, card, file);
+      }
     } else {
-      await createDemoCard(card, file);
+      if (state.mode === "supabase") {
+        await createRemoteCard(card, file);
+        await loadRemoteData();
+      } else {
+        await createDemoCard(card, file);
+      }
     }
 
-    els.cardForm.reset();
+    resetCardForm();
     els.cardPack.value = state.selectedPackId || state.packs[0]?.id || "";
-    els.cardWeight.value = String(RARITIES.comun.weight);
     renderAll();
-    showToast("Carta creada. Ya puede salir en los sobres.");
+    showToast(wasEditing ? "Carta editada." : "Carta creada. Ya puede salir en los sobres.");
   } catch (error) {
     console.error(error);
     showToast(error.message || "No he podido crear la carta.");
@@ -730,8 +821,14 @@ async function handlePackImport(event) {
 }
 
 async function handleAdminListClick(event) {
+  const editCardButton = event.target.closest("[data-edit-card-id]");
   const deletePackButton = event.target.closest("[data-delete-pack-id]");
   const deleteCardButton = event.target.closest("[data-delete-card-id]");
+
+  if (editCardButton) {
+    beginEditCard(editCardButton.dataset.editCardId);
+    return;
+  }
 
   if (deletePackButton) {
     const pack = state.packs.find((candidate) => candidate.id === deletePackButton.dataset.deletePackId);
@@ -747,6 +844,35 @@ async function handleAdminListClick(event) {
     if (!window.confirm(`¿Borrar la carta "${card.name}"?`)) return;
     await deleteCard(card.id);
   }
+}
+
+function beginEditCard(cardId) {
+  const card = state.cards.find((candidate) => candidate.id === cardId);
+  if (!card) return;
+
+  state.editingCardId = card.id;
+  els.cardPack.value = card.pack_id;
+  els.cardName.value = card.name;
+  els.cardDescription.value = card.description || "";
+  els.cardRarity.value = card.rarity;
+  els.cardWeight.value = String(card.weight || RARITIES[card.rarity]?.weight || RARITIES.comun.weight);
+  els.cardImage.required = false;
+  els.cardForm.querySelector("h2").textContent = "Editar carta";
+  els.cardForm.querySelector("button[type='submit']").innerHTML = `<i data-lucide="save"></i> Guardar carta`;
+  els.cancelCardEditButton.classList.remove("is-hidden");
+  switchView("admin", { silent: true });
+  renderIcons();
+  showToast(`Editando ${card.name}.`);
+}
+
+function resetCardForm() {
+  state.editingCardId = null;
+  els.cardForm.reset();
+  els.cardWeight.value = String(RARITIES.comun.weight);
+  els.cardImage.required = true;
+  els.cardForm.querySelector("h2").textContent = "Subir nueva carta";
+  els.cardForm.querySelector("button[type='submit']").innerHTML = `<i data-lucide="plus"></i> Crear carta`;
+  els.cancelCardEditButton.classList.add("is-hidden");
 }
 
 async function deletePack(packId) {
@@ -940,6 +1066,19 @@ async function createRemoteCard(card, file) {
   }
 }
 
+async function updateRemoteCard(cardId, updates, file) {
+  const payload = { ...updates };
+  if (file?.size) {
+    const styledImage = await stylizeCardImage(file, updates);
+    payload.image_url = await uploadStyledImage(styledImage, `${Date.now()}-${slugify(updates.name)}`);
+  }
+
+  const { error } = await supabaseClient.from("cards").update(payload).eq("id", cardId);
+  if (error) {
+    throw new Error(`No se pudo editar la carta: ${error.message}`);
+  }
+}
+
 async function uploadStyledImage(styledImage, filename) {
   const extension = styledImage.extension;
   const path = `${state.profile.id}/${filename}.${extension}`;
@@ -971,6 +1110,18 @@ async function createDemoCard(card, file) {
   saveDemoState();
 }
 
+async function updateDemoCard(cardId, updates, file) {
+  const existing = state.cards.find((card) => card.id === cardId);
+  if (!existing) throw new Error("Carta no encontrada.");
+  let imageUrl = existing.image_url;
+  if (file?.size) {
+    const styledImage = await stylizeCardImage(file, updates);
+    imageUrl = styledImage.dataUrl;
+  }
+  Object.assign(existing, updates, { image_url: imageUrl });
+  saveDemoState();
+}
+
 function renderAll(options = {}) {
   renderConfigState();
   updateAdminVisibility();
@@ -999,9 +1150,6 @@ function renderConfigState() {
   if (state.mode === "supabase") {
     els.modeBadge.textContent = state.isAdmin ? "Admin" : "Jugador";
   }
-  if (state.mode === "demo" && state.isAdmin) {
-    els.modeBadge.textContent = "Admin";
-  }
 }
 
 function renderStats() {
@@ -1017,6 +1165,7 @@ function renderStats() {
   els.ownedStat.textContent = String(totalCopies);
   els.uniqueStat.textContent = String(uniqueOwned);
   els.completionStat.textContent = `${completion}%`;
+  els.packCreditsStat.textContent = state.infinitePacks ? "∞" : String(state.packCredits);
 }
 
 function renderPacks() {
@@ -1084,13 +1233,18 @@ function renderCooldown() {
   if (!state.profile) return;
   const cooldownMs = getCooldownMs();
   const canOpenPack = Boolean(getActivePack() && getActivePackCards().length);
+  if (!state.infinitePacks && state.packCredits <= 0) {
+    els.cooldownCopy.textContent = "0 sobres disponibles. El admin puede recargarte desde Supabase.";
+    els.openPackButton.disabled = true;
+    return;
+  }
   if (cooldownMs > 0) {
     els.cooldownCopy.textContent = `Faltan ${formatDuration(cooldownMs)} para abrir otro sobre.`;
     els.openPackButton.disabled = true;
     return;
   }
 
-  els.cooldownCopy.textContent = "Listo para abrir.";
+  els.cooldownCopy.textContent = state.infinitePacks ? "Sobres infinitos activados." : `${state.packCredits} sobres disponibles.`;
   els.openPackButton.disabled = state.opening || !canOpenPack;
 }
 
@@ -1347,7 +1501,6 @@ function renderAdminList() {
   }
 
   els.adminCardList.innerHTML = state.cards
-    .slice(0, 18)
     .map((card) => {
       const rarity = RARITIES[card.rarity] || RARITIES.comun;
       const pack = state.packs.find((candidate) => candidate.id === card.pack_id);
@@ -1358,6 +1511,9 @@ function renderAdminList() {
             <p><strong>${escapeHtml(card.name)}</strong></p>
             <span>${rarity.label} · ${escapeHtml(pack?.name || "Sin sobre")} · peso ${Number(card.weight || 0)}</span>
           </div>
+          <button class="icon-button" type="button" data-edit-card-id="${card.id}" aria-label="Editar ${escapeAttribute(card.name)}">
+            <i data-lucide="pencil"></i>
+          </button>
           <button class="icon-button danger-button" type="button" data-delete-card-id="${card.id}" aria-label="Borrar ${escapeAttribute(card.name)}">
             <i data-lucide="trash-2"></i>
           </button>
@@ -1390,12 +1546,13 @@ function renderAdminPlayers() {
       ]).size;
       const holos = Object.values(holoCollection).reduce((sum, copies) => sum + Number(copies || 0), 0);
       const cooldown = getPlayerCooldown(player);
+      const packsLeft = player.infinite_packs ? "sobres infinitos" : `${Number(player.pack_credits ?? 0)} sobres`;
       return `
         <article class="small-card-row player-row">
           <div class="player-avatar">${escapeHtml(player.username.slice(0, 2).toUpperCase())}</div>
           <div>
             <p><strong>${escapeHtml(player.username)}</strong>${player.is_admin ? " · admin" : ""}</p>
-            <span>${totalCopies} cartas · ${unique} únicas · ${holos} holo · ${cooldown}</span>
+            <span>${totalCopies} cartas · ${unique} únicas · ${holos} holo · ${packsLeft} · ${cooldown}</span>
           </div>
         </article>
       `;
@@ -1405,7 +1562,7 @@ function renderAdminPlayers() {
 
 function getConfig() {
   const staticConfig = getStaticConfig();
-  if (staticConfig?.url || staticConfig?.anonKey || staticConfig?.accessPassword || staticConfig?.adminPassword) {
+  if (staticConfig?.url || staticConfig?.anonKey) {
     return staticConfig;
   }
 
@@ -1417,47 +1574,15 @@ function getConfig() {
 }
 
 function getStaticConfig() {
-  const staticConfig = window.ALDEPE_CONFIG || window.PACKFORGE_CONFIG;
+  const staticConfig = window.ALDEPE_CONFIG;
   const url = staticConfig?.supabaseUrl?.trim();
   const anonKey = staticConfig?.supabaseAnonKey?.trim();
-  const accessPassword = staticConfig?.accessPassword?.trim();
-  const accessPasswordSha256 = staticConfig?.accessPasswordSha256?.trim();
-  const adminPassword = staticConfig?.adminPassword?.trim();
 
-  if (!url && !anonKey && !accessPassword && !accessPasswordSha256 && !adminPassword) {
+  if (!url && !anonKey) {
     return null;
   }
 
-  return { url, anonKey, accessPassword, accessPasswordSha256, adminPassword };
-}
-
-async function validateAccessPassword(password, config) {
-  const expected = config?.accessPassword || "aldepe";
-  const expectedHash = config?.accessPasswordSha256;
-  const adminPassword = config?.adminPassword || "aldepe-admin";
-
-  if (password === adminPassword || password === expected) {
-    return true;
-  }
-
-  if (!expectedHash) {
-    return false;
-  }
-
-  return (await sha256(password)) === expectedHash;
-}
-
-function isDemoAdmin(username, password, config) {
-  const adminPassword = config?.adminPassword || "aldepe-admin";
-  return password === adminPassword;
-}
-
-async function sha256(value) {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return { url, anonKey };
 }
 
 function saveConfig() {
@@ -2027,15 +2152,6 @@ async function generatedPlaceholderFile(name, color = "#ff6f61") {
   return new File([blob], `${slugify(name)}.webp`, { type: blob.type });
 }
 
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
-    reader.readAsDataURL(file);
-  });
-}
-
 function slugify(value) {
   return value
     .normalize("NFD")
@@ -2044,14 +2160,6 @@ function slugify(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "")
     .slice(0, 48) || "carta";
-}
-
-function safeExtension(filename) {
-  const extension = filename.split(".").pop()?.toLowerCase();
-  if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension)) {
-    return extension === "jpeg" ? "jpg" : extension;
-  }
-  return "png";
 }
 
 function formatDuration(ms) {

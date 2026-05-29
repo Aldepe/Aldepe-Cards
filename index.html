@@ -18,7 +18,7 @@
           </div>
         </div>
 
-        <nav class="nav-tabs" aria-label="Vistas">
+        <nav class="nav-tabs is-hidden" id="appNav" aria-label="Vistas">
           <button class="nav-tab is-active" data-view="arena" type="button">
             <i data-lucide="sparkles"></i>
             Sobres
@@ -56,18 +56,23 @@
           </div>
           <form class="login-form" id="loginForm">
             <p class="eyebrow">Empieza una colección</p>
-            <h2>Entra con tu nombre de jugador</h2>
-            <label for="playerName">Nombre</label>
-            <input id="playerName" name="playerName" autocomplete="nickname" maxlength="24" placeholder="Ej. Alex" required />
+            <h2>Entra con correo y contraseña</h2>
+            <p class="starter-copy">Cuenta nueva = 30 sobres de bienvenida.</p>
+            <label for="playerEmail">Correo</label>
+            <input id="playerEmail" name="playerEmail" type="email" autocomplete="email" maxlength="80" placeholder="tu@email.com" required />
 
             <label for="playerPassword">Contraseña</label>
             <div class="inline-input">
-              <input id="playerPassword" name="playerPassword" type="password" autocomplete="current-password" maxlength="64" placeholder="Contraseña del grupo" required />
+              <input id="playerPassword" name="playerPassword" type="password" autocomplete="current-password" minlength="6" maxlength="80" placeholder="Min. 6 caracteres" required />
               <button class="primary-button" type="submit">
                 <i data-lucide="log-in"></i>
                 Entrar
               </button>
             </div>
+            <button class="secondary-button" id="signupButton" type="button">
+              <i data-lucide="user-plus"></i>
+              Crear cuenta
+            </button>
           </form>
         </section>
 
@@ -89,6 +94,10 @@
               <div class="stat">
                 <strong id="completionStat">0%</strong>
                 <span>álbum</span>
+              </div>
+              <div class="stat">
+                <strong id="packCreditsStat">0</strong>
+                <span>sobres</span>
               </div>
             </div>
           </div>
@@ -243,6 +252,10 @@
                 <button class="primary-button" type="submit">
                   <i data-lucide="plus"></i>
                   Crear carta
+                </button>
+                <button class="secondary-button is-hidden" id="cancelCardEditButton" type="button">
+                  <i data-lucide="x"></i>
+                  Cancelar edición
                 </button>
               </form>
 

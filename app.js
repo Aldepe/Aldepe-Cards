@@ -8,6 +8,8 @@ const STORAGE_KEYS = {
 const PACK_SIZE = 3;
 const PACK_COOLDOWN_MS = 8 * 60 * 60 * 1000;
 const HOLO_CHANCE = 0.025;
+const APP_NAME = "Medina & Aldepe Cards";
+const PUBLIC_APP_URL = "https://aldepe.github.io/Aldepe-Cards/";
 const DEFAULT_SUPABASE_CONFIG = {
   url: "https://snjrfvawkkdwyzshmslw.supabase.co",
   anonKey:
@@ -58,6 +60,7 @@ const state = {
   trades: [],
   activity: [],
   lastPackOpenedAt: null,
+  lastPackGeneratedAt: null,
   activeView: "arena",
   activeFilter: "all",
   opening: false,
@@ -91,6 +94,7 @@ const els = {
   completionStat: $("#completionStat"),
   packCreditsStat: $("#packCreditsStat"),
   openPackButton: $("#openPackButton"),
+  generatePackButton: $("#generatePackButton"),
   cooldownCopy: $("#cooldownCopy"),
   packMachine: $("#packMachine"),
   packObject: $("#packObject"),
@@ -137,6 +141,7 @@ const els = {
 init();
 
 function init() {
+  document.title = APP_NAME;
   els.playerEmail.value = localStorage.getItem(STORAGE_KEYS.player) || "";
   bindEvents();
   updateAdminVisibility();
@@ -151,6 +156,7 @@ function bindEvents() {
   els.loginForm.addEventListener("submit", handleLogin);
   els.signupButton.addEventListener("click", handleSignup);
   els.openPackButton.addEventListener("click", openPack);
+  els.generatePackButton.addEventListener("click", claimPackCredit);
   els.packForm.addEventListener("submit", handlePackCreate);
   els.importForm.addEventListener("submit", handlePackImport);
   els.cardForm.addEventListener("submit", handleCardCreate);
@@ -276,6 +282,7 @@ function startDemoSession(email) {
     infinite_packs: false,
     created_at: new Date().toISOString(),
     last_pack_opened_at: null,
+    last_pack_generated_at: null,
   };
   player.username = username;
   player.is_admin = false;
@@ -297,6 +304,8 @@ function startDemoSession(email) {
   state.trades = saved.trades || [];
   state.activity = saved.activity;
   state.lastPackOpenedAt = saved.lastPackOpenedAtByPlayer?.[playerId] || player.last_pack_opened_at || null;
+  state.lastPackGeneratedAt =
+    saved.lastPackGeneratedAtByPlayer?.[playerId] || player.last_pack_generated_at || null;
   renderAll();
   saveDemoState();
 }
@@ -316,7 +325,7 @@ async function startSupabaseSession(email, password, config, mode) {
       email,
       password,
       options: {
-        emailRedirectTo: window.location.href,
+        emailRedirectTo: getAuthRedirectUrl(),
         data: {
           username: email.split("@")[0],
         },
@@ -363,7 +372,7 @@ async function startSupabaseSession(email, password, config, mode) {
 
   const { data: profile, error: readError } = await supabaseClient
     .from("profiles")
-    .select("id, username, is_admin, pack_credits, infinite_packs, last_pack_opened_at")
+    .select("id, username, is_admin, pack_credits, infinite_packs, last_pack_opened_at, last_pack_generated_at")
     .eq("id", userId)
     .single();
 
@@ -377,6 +386,7 @@ async function startSupabaseSession(email, password, config, mode) {
   state.packCredits = Number(profile.pack_credits || 0);
   state.infinitePacks = Boolean(profile.infinite_packs);
   state.lastPackOpenedAt = profile.last_pack_opened_at;
+  state.lastPackGeneratedAt = profile.last_pack_generated_at;
 
   await loadRemoteData();
   renderAll();
@@ -386,7 +396,7 @@ async function startSupabaseSession(email, password, config, mode) {
 async function loadRemoteData() {
   const { data: profile } = await supabaseClient
     .from("profiles")
-    .select("id, username, is_admin, pack_credits, infinite_packs, last_pack_opened_at")
+    .select("id, username, is_admin, pack_credits, infinite_packs, last_pack_opened_at, last_pack_generated_at")
     .eq("id", state.profile.id)
     .single();
 
@@ -396,6 +406,7 @@ async function loadRemoteData() {
     state.packCredits = Number(profile.pack_credits || 0);
     state.infinitePacks = Boolean(profile.infinite_packs);
     state.lastPackOpenedAt = profile.last_pack_opened_at;
+    state.lastPackGeneratedAt = profile.last_pack_generated_at;
   }
 
   const { data: packs, error: packError } = await supabaseClient
@@ -420,7 +431,7 @@ async function loadRemoteData() {
 
   const { data: players, error: playersError } = await supabaseClient
     .from("profiles")
-    .select("id, username, is_admin, pack_credits, infinite_packs, last_pack_opened_at, created_at")
+    .select("id, username, is_admin, pack_credits, infinite_packs, last_pack_opened_at, last_pack_generated_at, created_at")
     .order("created_at", { ascending: true });
 
   if (playersError) {
@@ -503,6 +514,7 @@ async function logout() {
   state.trades = [];
   state.activity = [];
   state.lastPackOpenedAt = null;
+  state.lastPackGeneratedAt = null;
   els.playerPassword.value = "";
   els.workspace.classList.add("is-hidden");
   els.loginGate.classList.remove("is-hidden");
@@ -554,15 +566,9 @@ async function openPack() {
     showToast("Este sobre todavía no tiene cartas.");
     return;
   }
-  const cooldownMs = getCooldownMs();
-  if (cooldownMs > 0) {
-    renderCooldown();
-    showToast(`Podrás abrir otro sobre en ${formatDuration(cooldownMs)}.`);
-    return;
-  }
   if (!state.infinitePacks && state.packCredits <= 0) {
     renderCooldown();
-    showToast("No te quedan sobres. Pide recarga al admin desde Supabase.");
+    showToast("No te quedan sobres. Genera uno cuando esté listo o pide recarga al admin.");
     return;
   }
 
@@ -593,9 +599,45 @@ async function openRemotePack() {
   if (error) {
     throw new Error(`No se pudo abrir el sobre: ${error.message}`);
   }
-  state.lastPackOpenedAt = new Date().toISOString();
   await loadRemoteData();
   return (data || []).map(normalizeCard);
+}
+
+async function claimPackCredit() {
+  if (!state.profile || state.infinitePacks) return;
+  const cooldownMs = getCooldownMs();
+  if (cooldownMs > 0) {
+    renderCooldown();
+    showToast(`Podrás generar otro sobre en ${formatDuration(cooldownMs)}.`);
+    return;
+  }
+
+  els.generatePackButton.disabled = true;
+  playSound("tap");
+
+  try {
+    if (state.mode === "supabase") {
+      const { error } = await supabaseClient.rpc("claim_pack_credit");
+      if (error) throw new Error(error.message);
+      await loadRemoteData();
+    } else {
+      state.packCredits += 1;
+      state.lastPackGeneratedAt = new Date().toISOString();
+      state.players = state.players.map((player) =>
+        player.id === state.profile.id
+          ? { ...player, pack_credits: state.packCredits, last_pack_generated_at: state.lastPackGeneratedAt }
+          : player,
+      );
+      saveDemoState();
+    }
+    renderAll();
+    showToast("Sobre generado. Ya puedes abrirlo cuando quieras.");
+  } catch (error) {
+    console.error(error);
+    showToast(error.message || "No he podido generar el sobre.");
+  } finally {
+    renderCooldown();
+  }
 }
 
 function openDemoPack() {
@@ -1266,32 +1308,39 @@ function renderCooldown() {
   if (!state.profile) return;
   const cooldownMs = getCooldownMs();
   const canOpenPack = Boolean(getActivePack() && getActivePackCards().length);
-  if (!state.infinitePacks && state.packCredits <= 0) {
-    els.cooldownCopy.textContent = "0 sobres disponibles. El admin puede recargarte desde Supabase.";
-    els.openPackButton.disabled = true;
-    return;
-  }
-  if (cooldownMs > 0) {
-    els.cooldownCopy.textContent = `Faltan ${formatDuration(cooldownMs)} para abrir otro sobre.`;
-    els.openPackButton.disabled = true;
+  const canSpendPack = state.infinitePacks || state.packCredits > 0;
+
+  els.openPackButton.disabled = state.opening || !canOpenPack || !canSpendPack;
+  els.generatePackButton.disabled = state.infinitePacks || cooldownMs > 0;
+
+  if (state.infinitePacks) {
+    els.cooldownCopy.textContent = "Sobres infinitos activados. Abre todos los que quieras.";
+    els.generatePackButton.textContent = "Sobres infinitos";
     return;
   }
 
-  els.cooldownCopy.textContent = state.infinitePacks ? "Sobres infinitos activados." : `${state.packCredits} sobres disponibles.`;
-  els.openPackButton.disabled = state.opening || !canOpenPack;
+  if (cooldownMs > 0) {
+    els.cooldownCopy.textContent = `${state.packCredits} sobres disponibles. Próximo sobre gratis en ${formatDuration(cooldownMs)}.`;
+    els.generatePackButton.innerHTML = `<i data-lucide="timer"></i> ${formatDuration(cooldownMs)}`;
+  } else {
+    els.cooldownCopy.textContent = `${state.packCredits} sobres disponibles. Puedes generar +1 ahora.`;
+    els.generatePackButton.innerHTML = `<i data-lucide="package-plus"></i> Generar sobre`;
+  }
+
+  renderIcons();
 }
 
 function getCooldownMs() {
-  if (!state.lastPackOpenedAt) {
+  if (!state.lastPackGeneratedAt) {
     return 0;
   }
 
-  const openedAt = new Date(state.lastPackOpenedAt).getTime();
-  if (Number.isNaN(openedAt)) {
+  const generatedAt = new Date(state.lastPackGeneratedAt).getTime();
+  if (Number.isNaN(generatedAt)) {
     return 0;
   }
 
-  return Math.max(0, openedAt + PACK_COOLDOWN_MS - Date.now());
+  return Math.max(0, generatedAt + PACK_COOLDOWN_MS - Date.now());
 }
 
 function renderOdds() {
@@ -1658,6 +1707,7 @@ function readDemoState() {
         trades: saved.trades || [],
         activity: saved.activity || [],
         lastPackOpenedAtByPlayer: saved.lastPackOpenedAtByPlayer || {},
+        lastPackGeneratedAtByPlayer: saved.lastPackGeneratedAtByPlayer || {},
       };
     }
   } catch {
@@ -1674,6 +1724,7 @@ function readDemoState() {
     trades: [],
     activity: [],
     lastPackOpenedAtByPlayer: {},
+    lastPackGeneratedAtByPlayer: {},
   };
   localStorage.setItem(STORAGE_KEYS.demo, JSON.stringify(initial));
   return initial;
@@ -1693,6 +1744,7 @@ function ensureDemoTestPlayer(players) {
       is_admin: false,
       created_at: new Date().toISOString(),
       last_pack_opened_at: null,
+      last_pack_generated_at: null,
     },
   ];
 }
@@ -1706,7 +1758,14 @@ function saveDemoState() {
       packs: state.packs,
       selectedPackId: state.selectedPackId,
       players: state.players.map((player) =>
-        player.id === state.profile.id ? { ...player, last_pack_opened_at: state.lastPackOpenedAt } : player,
+        player.id === state.profile.id
+          ? {
+              ...player,
+              pack_credits: state.packCredits,
+              last_pack_opened_at: state.lastPackOpenedAt,
+              last_pack_generated_at: state.lastPackGeneratedAt,
+            }
+          : player,
       ),
       collectionsByPlayer: {
         ...state.allCollections,
@@ -1721,6 +1780,10 @@ function saveDemoState() {
       lastPackOpenedAtByPlayer: {
         ...(readDemoState().lastPackOpenedAtByPlayer || {}),
         [state.profile.id]: state.lastPackOpenedAt,
+      },
+      lastPackGeneratedAtByPlayer: {
+        ...(readDemoState().lastPackGeneratedAtByPlayer || {}),
+        [state.profile.id]: state.lastPackGeneratedAt,
       },
     }),
   );
@@ -1777,17 +1840,17 @@ function getCard(cardId) {
 }
 
 function getPlayerCooldown(player) {
-  if (!player?.last_pack_opened_at) {
-    return "sobre listo";
+  if (!player?.last_pack_generated_at) {
+    return "puede generar";
   }
 
-  const openedAt = new Date(player.last_pack_opened_at).getTime();
-  if (Number.isNaN(openedAt)) {
-    return "sobre listo";
+  const generatedAt = new Date(player.last_pack_generated_at).getTime();
+  if (Number.isNaN(generatedAt)) {
+    return "puede generar";
   }
 
-  const remaining = Math.max(0, openedAt + PACK_COOLDOWN_MS - Date.now());
-  return remaining > 0 ? `faltan ${formatDuration(remaining)}` : "sobre listo";
+  const remaining = Math.max(0, generatedAt + PACK_COOLDOWN_MS - Date.now());
+  return remaining > 0 ? `genera en ${formatDuration(remaining)}` : "puede generar";
 }
 
 function removeCardsFromAllCollections(cardIds) {
@@ -2320,6 +2383,16 @@ function setAuthHint(message, tone = "") {
   els.authHint.classList.toggle("is-visible", Boolean(message));
   els.authHint.classList.toggle("is-error", tone === "error");
   els.authHint.classList.toggle("is-success", tone === "success");
+}
+
+function getAuthRedirectUrl() {
+  const currentUrl = new URL(window.location.href);
+  if (["localhost", "127.0.0.1"].includes(currentUrl.hostname)) {
+    return PUBLIC_APP_URL;
+  }
+  currentUrl.hash = "";
+  currentUrl.search = "";
+  return currentUrl.href;
 }
 
 function renderIcons() {

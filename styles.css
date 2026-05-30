@@ -547,7 +547,7 @@ textarea:focus {
 
 .stat-group {
   display: grid;
-  grid-template-columns: repeat(3, minmax(78px, 1fr));
+  grid-template-columns: repeat(4, minmax(78px, 1fr));
   gap: 10px;
 }
 
@@ -606,6 +606,19 @@ textarea:focus {
   border-left: 5px solid var(--green);
   background: rgba(19, 242, 109, 0.12);
   font-weight: 850;
+}
+
+.generate-button {
+  justify-self: start;
+  min-width: 176px;
+  border-color: rgba(239, 255, 32, 0.5);
+  background: rgba(239, 255, 32, 0.1);
+}
+
+.generate-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
 }
 
 .pack-selector {

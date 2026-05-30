@@ -3,18 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aldepe Forge</title>
-    <link rel="stylesheet" href="./styles.css?v=papota-2" />
+    <title>Medina & Aldepe Cards</title>
+    <link rel="stylesheet" href="./styles.css?v=papota-3" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div class="brand-lockup" aria-label="Aldepe Forge">
+        <div class="brand-lockup" aria-label="Medina & Aldepe Cards">
           <span class="brand-mark" aria-hidden="true"></span>
           <div>
             <p class="eyebrow">Coleccionable privado</p>
-            <h1>Aldepe Forge</h1>
+            <h1>Medina & Aldepe Cards</h1>
           </div>
         </div>
 
@@ -116,6 +116,10 @@
                 <h2 id="activePackName">Sin sobre</h2>
                 <p id="activePackMeta">Elige una colección para empezar.</p>
                 <p class="cooldown-copy" id="cooldownCopy"></p>
+                <button class="secondary-button generate-button" id="generatePackButton" type="button">
+                  <i data-lucide="package-plus"></i>
+                  Generar sobre
+                </button>
                 <div class="odds-row" id="oddsRow"></div>
               </div>
 
@@ -315,7 +319,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="./config.js?v=papota-2"></script>
-    <script type="module" src="./app.js?v=papota-2"></script>
+    <script src="./config.js?v=papota-3"></script>
+    <script type="module" src="./app.js?v=papota-3"></script>
   </body>
 </html>
